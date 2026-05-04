@@ -1,0 +1,58 @@
+# Data Configuration
+# Settings for data loading, aggregation, and preprocessing
+
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  
+  # Dataset files to load
+  bareilly_files:
+    - "CEEW - Smart meter data Bareilly 2019.csv"
+    - "CEEW - Smart meter data Bareilly 2020.csv"
+    - "CEEW - Smart meter data Bareilly 2021.csv"
+  
+  mathura_files:
+    - "CEEW - Smart meter data Mathura 2019.csv"
+    - "CEEW - Smart meter data Mathura 2020.csv"
+    - "CEEW - Smart meter data Mathura 2021.csv"
+
+aggregation:
+  # Aggregate from 3-minute to this interval
+  interval: "15min"  # Options: "15min", "H" (hourly)
+  consumption_column: "kwh"
+
+preprocessing:
+  # Handle missing values
+  missing_strategy: "forward_fill"  # Options: "forward_fill", "backward_fill", "interpolate", "drop"
+  
+  # Remove outliers (z-score based)
+  remove_outliers: true
+  outlier_threshold: 3.0
+  
+  # Columns to check for outliers
+  outlier_columns:
+    - "kwh"
+    - "avg_voltage_volt"
+    - "avg_current_amp"
+
+zones:
+  - "Bareilly"
+  - "Mathura"
+
+# Train-test split
+train_test_split:
+  train_ratio: 0.7
+  validation_ratio: 0.15
+  test_ratio: 0.15
+  date_split: true  # Split by date rather than random
+
+# Feature engineering settings
+features:
+  create_temporal: true
+  create_cyclical: true
+  create_lags: true
+  lag_values: [1, 24, 168]  # 1, 24, 168 hour lags
+  create_rolling: true
+  rolling_windows: [24, 168]  # 24-hour and 7-day windows
+  create_deviation: true
+  deviation_window: 168

@@ -1,0 +1,59 @@
+# Model Hyperparameters and Configuration
+
+# ARIMA Model
+arima:
+  order: [1, 1, 1]  # (p, d, q) - adjust based on ACF/PACF analysis
+  seasonal_order: [1, 1, 1, 168]  # (P, D, Q, s) - 168 = weekly seasonality
+  max_order: 5
+
+# Exponential Smoothing
+exponential_smoothing:
+  trend: "add"  # "add" or "mul"
+  seasonal: "add"  # "add", "mul", or None
+  seasonal_periods: 168
+  initialization_method: "estimated"
+
+# LSTM Model
+lstm:
+  lookback: 168  # Use 7 days (168 hours) of history
+  hidden_units: 64
+  dropout_rate: 0.2
+  epochs: 100
+  batch_size: 32
+  validation_split: 0.2
+  early_stopping: true
+  early_stopping_patience: 10
+
+# Ensemble Forecasting
+ensemble:
+  # Weights for combining models (will be normalized)
+  arima_weight: 0.3
+  exponential_smoothing_weight: 0.3
+  lstm_weight: 0.4
+  
+  # Whether to optimize weights on validation set
+  optimize_weights: true
+  
+  # Confidence interval settings
+  confidence_level: 0.95
+
+# Prophet (alternative)
+prophet:
+  interval_width: 0.95
+  yearly_seasonality: true
+  weekly_seasonality: true
+  daily_seasonality: true
+  seasonality_mode: "additive"
+  growth: "linear"
+
+# Training settings
+training:
+  validation_size: 0.15
+  test_size: 0.15
+  random_state: 42
+  n_jobs: -1  # Use all CPU cores
+
+# Forecasting horizon
+forecasting:
+  horizon_hours: 24  # Forecast 24 hours ahead
+  update_frequency: "hourly"  # Update forecasts hourly

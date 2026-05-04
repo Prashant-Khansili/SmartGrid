@@ -1,0 +1,42 @@
+# Environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.DS_Store
+.env
+.envrc
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data
+/data/
+/dataset/
+
+# Outputs & Models
+/outputs/
+*.pkl
+*.joblib
+*.h5
+*.pth
+
+# Logs and Reports
+*.log
+BUILD_REPORT.txt
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+

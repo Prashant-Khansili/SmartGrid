@@ -1,0 +1,26 @@
+# Data Processing & Analysis
+pandas>=1.5.0
+numpy>=1.23.0
+scipy>=1.9.0
+scikit-learn>=1.1.0
+
+# Time Series & Forecasting
+statsmodels>=0.13.0
+pmdarima>=2.0.0
+tensorflow>=2.10.0
+keras>=2.10.0
+
+# Anomaly Detection & ML
+shap>=0.41.0
+
+# API & Web
+fastapi>=0.95.0
+uvicorn>=0.21.0
+streamlit>=1.20.0
+plotly>=5.12.0
+
+# Utilities
+pyyaml>=6.0
+python-dotenv>=0.21.0
+tqdm>=4.64.0
+

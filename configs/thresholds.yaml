@@ -1,0 +1,74 @@
+# Anomaly Detection Thresholds and Configuration
+
+anomaly_detection:
+  method: "isolation_forest"  # "isolation_forest", "statistical", or "ensemble"
+  
+  # Isolation Forest parameters
+  isolation_forest:
+    contamination: 0.1  # Expected proportion of anomalies (10%)
+    n_estimators: 100
+    max_samples: "auto"
+    random_state: 42
+  
+  # Statistical baselines (z-score, IQR)
+  statistical:
+    zscore_threshold: 3.0  # Flag if > 3 std deviations from mean
+    iqr_multiplier: 1.5  # IQR-based threshold: Q3 + multiplier*IQR
+
+# Anomaly classification
+anomaly_classification:
+  # Categories: theft, tampering, irregular_usage, normal
+  # Thresholds for classifying detected anomalies
+  
+  # Theft: consistent underreporting (maintained low usage)
+  theft:
+    min_duration_days: 7  # Sustained for at least 7 days
+    deviation_pct_threshold: -30  # At least 30% below normal
+    consistency_score_threshold: 0.8  # High consistency in pattern
+  
+  # Tampering: sudden drops or spikes
+  tampering:
+    drop_threshold_pct: -50  # Sudden drop > 50%
+    spike_threshold_pct: 100  # Sudden spike > 100%
+    min_magnitude: 0.5  # Minimum absolute change
+  
+  # Irregular usage: deviations but not systematic
+  irregular_usage:
+    deviation_pct_threshold: 20  # Deviation > 20%
+    consistency_score_threshold: 0.4  # Lower consistency
+
+# False positive mitigation
+false_positive_mitigation:
+  # Cross-validate with peer patterns
+  use_peer_comparison: true
+  peer_similarity_threshold: 0.8  # Meters with > 80% similar patterns
+  
+  # Require temporal consistency
+  require_sustained_anomaly: true
+  min_anomaly_duration_periods: 6  # At least 6 periods (1.5 hours at 15-min intervals)
+  
+  # Whitelist known patterns per zone
+  use_whitelist: true
+
+# Risk thresholds (per zone)
+risk_scoring:
+  # Severity levels: low, medium, high
+  low_threshold: 0.3
+  medium_threshold: 0.7
+  high_threshold: 0.9
+
+# Zone-specific thresholds (optional)
+zone_thresholds:
+  Bareilly:
+    contamination: 0.1
+    zscore_threshold: 3.0
+  
+  Mathura:
+    contamination: 0.1
+    zscore_threshold: 3.0
+
+# Monitoring and alerting
+monitoring:
+  alert_on_high_risk: true
+  alert_threshold: 0.9
+  batch_check_frequency_minutes: 60  # Check anomalies every hour
