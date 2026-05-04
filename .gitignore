@@ -23,6 +23,7 @@ __pycache__/
 # Data
 /data/
 /dataset/
+/datasets/
 
 # Outputs & Models
 /outputs/
