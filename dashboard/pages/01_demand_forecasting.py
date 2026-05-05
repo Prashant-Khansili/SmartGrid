@@ -19,8 +19,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.models.demand.lstm_model import LSTMForecaster
 from src.data.data_processor import DataProcessor
 from src.data.feature_engineering import FeatureEngineer
+from src.model_manager import (
+    model_manager,
+    data_manager,
+    initialize_managers,
+    get_model_status_message,
+)
 
 logger = logging.getLogger(__name__)
+
+# Initialize managers on first run
+initialize_managers()
 
 # ============================================================================
 # PAGE CONFIG
@@ -34,6 +43,9 @@ st.set_page_config(
 
 st.title("📊 Demand Forecasting Dashboard")
 st.markdown("AI-powered electricity demand prediction for BESCOM zones")
+
+# Show model status
+st.markdown(f"**Model Status:** {get_model_status_message()}")
 
 # ============================================================================
 # SIDEBAR CONTROLS
@@ -75,44 +87,32 @@ with st.sidebar:
 # ============================================================================
 @st.cache_resource
 def load_or_create_sample_data():
-    """Generate sample smart meter data for demonstration"""
-    dates = pd.date_range(start="2024-01-01", end="2024-03-31", freq="15min")
+    """Load real data from datasets folder or generate sample data"""
+    if data_manager.use_real_data:
+        # Load real CEEW data
+        data = data_manager.load_real_data()
+        if data is not None:
+            return data
 
-    # Generate realistic consumption patterns
-    hourly_pattern = 25 + 15 * np.sin(np.arange(len(dates)) * 2 * np.pi / (24 * 4))
-    daily_noise = np.random.normal(0, 2, len(dates))
-    weekly_pattern = 5 * np.sin(np.arange(len(dates)) * 2 * np.pi / (7 * 24 * 4))
-
-    consumption = np.maximum(
-        hourly_pattern
-        + daily_noise
-        + weekly_pattern
-        + np.random.normal(0, 1, len(dates)),
-        5,
-    )
-
-    df = pd.DataFrame(
-        {
-            "timestamp": dates,
-            "kwh": consumption,
-            "zone": (
-                selected_zone
-                if selected_zone != "All Zones"
-                else np.random.choice(["Bareilly", "Mathura"], len(dates))
-            ),
-            "meter_id": f"METER_{selected_zone}_001",
-        }
-    )
-
-    return df.sort_values("timestamp").reset_index(drop=True)
+    # Fallback to sample data
+    return data_manager._generate_sample_data()
 
 
 @st.cache_resource
 def train_forecast_model(_data):
-    """Train LSTM forecaster"""
+    """Load pre-trained model or train new one"""
+    # Check if pre-trained model exists
+    if model_manager.models_loaded and model_manager.lstm_model is not None:
+        st.info("✅ Using pre-trained LSTM model (from notebook training)")
+        return model_manager.lstm_model
+
+    # Fallback: train on-the-fly
     try:
+        st.info("⚠️ Training LSTM on sample data (run notebook for better results)")
         forecaster = LSTMForecaster(lookback=168, hidden_units=64, epochs=5)
-        forecaster.fit(_data["kwh"])
+        forecaster.fit(
+            _data["kwh"] if "kwh" in _data.columns else _data["consumption_kwh"]
+        )
         return forecaster
     except Exception as e:
         st.error(f"Model training error: {e}")

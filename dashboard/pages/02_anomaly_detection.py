@@ -18,8 +18,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.models.anomaly.isolation_forest import IsolationForestDetector
 from src.data.data_processor import DataProcessor
+from src.model_manager import (
+    model_manager,
+    data_manager,
+    initialize_managers,
+    get_model_status_message,
+)
 
 logger = logging.getLogger(__name__)
+
+# Initialize managers on first run
+initialize_managers()
 
 # ============================================================================
 # PAGE CONFIG
@@ -33,6 +42,9 @@ st.set_page_config(
 
 st.title("⚠️ Anomaly Detection Dashboard")
 st.markdown("AI-powered theft, tampering, and anomaly detection for smart meters")
+
+# Show model status
+st.markdown(f"**Model Status:** {get_model_status_message()}")
 
 # ============================================================================
 # SIDEBAR CONTROLS
@@ -87,58 +99,15 @@ with st.sidebar:
 # ============================================================================
 @st.cache_resource
 def load_meter_data():
-    """Generate sample smart meter data for multiple meters"""
-    zones_list = (
-        ["Bareilly", "Mathura"] if selected_zone == "All Zones" else [selected_zone]
-    )
+    """Load meter data from real datasets folder or generate sample"""
+    if data_manager.use_real_data:
+        # Load real CEEW data
+        data = data_manager.load_real_data()
+        if data is not None:
+            return data
 
-    dates = pd.date_range(
-        start=datetime.now() - timedelta(days=90), end=datetime.now(), freq="15min"
-    )
-
-    all_data = []
-
-    for zone in zones_list:
-        for meter_num in range(1, 6):  # 5 meters per zone
-            # Normal consumption pattern
-            hourly_pattern = 20 + 10 * np.sin(
-                np.arange(len(dates)) * 2 * np.pi / (24 * 4)
-            )
-            daily_noise = np.random.normal(0, 1.5, len(dates))
-            weekly_pattern = 3 * np.sin(
-                np.arange(len(dates)) * 2 * np.pi / (7 * 24 * 4)
-            )
-
-            consumption = (
-                hourly_pattern
-                + daily_noise
-                + weekly_pattern
-                + np.random.normal(0, 0.5, len(dates))
-            )
-
-            # Add some anomalies (sudden drops, spikes, etc.)
-            anomaly_mask = np.random.random(len(dates)) < 0.01
-            consumption[anomaly_mask] = consumption[anomaly_mask] * np.random.choice(
-                [0.3, 2.5], np.sum(anomaly_mask)
-            )
-
-            consumption = np.maximum(consumption, 1)
-
-            df = pd.DataFrame(
-                {
-                    "timestamp": dates,
-                    "meter_id": f"METER_{zone}_{meter_num:03d}",
-                    "zone": zone,
-                    "consumption_kwh": consumption,
-                    "voltage": 230 + np.random.normal(0, 5, len(dates)),
-                    "current": 10 + np.random.normal(0, 2, len(dates)),
-                    "power_factor": 0.95 + np.random.normal(0, 0.02, len(dates)),
-                }
-            )
-
-            all_data.append(df)
-
-    return pd.concat(all_data, ignore_index=True).sort_values("timestamp")
+    # Fallback to sample data
+    return data_manager._generate_sample_data(days=days_lookback)
 
 
 @st.cache_resource
