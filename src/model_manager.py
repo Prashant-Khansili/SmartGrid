@@ -16,10 +16,24 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 logger = logging.getLogger(__name__)
 
-# Define paths
-PROJECT_ROOT = Path(__file__).parent.parent
-OUTPUT_DIR = PROJECT_ROOT / "outputs"
-DATASETS_DIR = PROJECT_ROOT / "datasets"  # Real data folder
+# ============================================================================
+# DETECT ENVIRONMENT (Kaggle vs Local)
+# ============================================================================
+IS_KAGGLE = Path('/kaggle/working').exists()
+
+if IS_KAGGLE:
+    # Kaggle environment
+    PROJECT_ROOT = Path('/kaggle/working')
+    OUTPUT_DIR = Path('/kaggle/working')  # Models in /kaggle/working
+    DATASETS_DIR = Path('/kaggle/input/ceew-smart-meter-data')  # Dataset name
+    logger.info("✅ Kaggle environment detected")
+else:
+    # Local environment
+    PROJECT_ROOT = Path(__file__).parent.parent
+    OUTPUT_DIR = PROJECT_ROOT / "outputs"
+    DATASETS_DIR = PROJECT_ROOT / "datasets"  # Real data folder
+    logger.info("✅ Local environment detected")
+
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 
