@@ -41,3 +41,6 @@ BUILD_REPORT.txt
 .coverage
 htmlcov/
 
+# Markdown files (excluding README)
+*.md
+!README.md
