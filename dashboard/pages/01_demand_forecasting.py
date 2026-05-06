@@ -83,6 +83,7 @@ with st.sidebar:
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_or_create_sample_data():
     """Load real data from datasets folder or generate sample data"""
     # Try to load real data first

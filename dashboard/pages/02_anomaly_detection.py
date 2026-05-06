@@ -97,6 +97,7 @@ with st.sidebar:
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_meter_data():
     """Load meter data from real datasets folder or generate sample"""
     # Try to load real data first
@@ -108,6 +109,7 @@ def load_meter_data():
     return data_manager._generate_sample_data(days=days_lookback)
 
 
+@st.cache_resource
 def train_anomaly_detector(_data, _sensitivity):
     """Train Isolation Forest detector"""
     try:
@@ -198,13 +200,16 @@ def generate_inspection_report(meter_id, meter_data):
 
 # Load data
 with st.spinner("Loading meter data..."):
-    df = load_meter_data()
-    if selected_zone != "All Zones":
-        df = df[df["zone"] == selected_zone]
+    df_full = load_meter_data()
+    df = (
+        df_full
+        if selected_zone == "All Zones"
+        else df_full[df_full["zone"] == selected_zone]
+    )
 
-# Train detector
+# Train detector (cached with zone + sensitivity as keys)
 with st.spinner(f"Training {detection_method} detector..."):
-    detector, scaler, X_scaled = train_anomaly_detector(df, sensitivity)
+    detector, scaler, X_scaled = train_anomaly_detector(df.copy(), sensitivity)
 
 # Detect anomalies
 predictions, scores = detect_anomalies(detector, X_scaled)
