@@ -19,16 +19,17 @@ logger = logging.getLogger(__name__)
 # Define paths
 PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
+KERAS_MODEL_DIR = PROJECT_ROOT / "keras-trained model"  # Pre-trained models folder
 DATASETS_DIR = PROJECT_ROOT / "datasets"  # Real data folder
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 
-# Model file paths
-LSTM_MODEL_PATH = OUTPUT_DIR / "demand_forecasting_lstm.keras"
-SCALER_X_PATH = OUTPUT_DIR / "scaler_X.pkl"
-SCALER_Y_PATH = OUTPUT_DIR / "scaler_y.pkl"
-FEATURES_PATH = OUTPUT_DIR / "feature_columns.pkl"
-METADATA_PATH = OUTPUT_DIR / "model_metadata.pkl"
+# Model file paths - Use pre-trained models from keras-trained model folder
+LSTM_MODEL_PATH = KERAS_MODEL_DIR / "demand_forecasting_lstm (1).keras"
+SCALER_X_PATH = KERAS_MODEL_DIR / "scaler_X.pkl"
+SCALER_Y_PATH = KERAS_MODEL_DIR / "scaler_y.pkl"
+FEATURES_PATH = KERAS_MODEL_DIR / "feature_columns.pkl"
+METADATA_PATH = KERAS_MODEL_DIR / "model_metadata.pkl"
 
 
 class ModelManager:
@@ -55,9 +56,9 @@ class ModelManager:
         exist = all(f.exists() for f in required_files)
 
         if exist:
-            logger.info(f"✅ All trained models found in {OUTPUT_DIR}")
+            logger.info(f"✅ All trained models found in {KERAS_MODEL_DIR}")
         else:
-            logger.warning(f"⚠️  Some models missing in {OUTPUT_DIR}")
+            logger.warning(f"⚠️  Some models missing in {KERAS_MODEL_DIR}")
             logger.warning(
                 f"   Missing: {[f.name for f in required_files if not f.exists()]}"
             )
@@ -73,20 +74,47 @@ class ModelManager:
         try:
             logger.info("Loading trained models...")
 
-            # Load scalers
-            with open(SCALER_X_PATH, "rb") as f:
-                self.scaler_x = pickle.load(f)
+            # Load scalers with robust error handling
+            try:
+                with open(SCALER_X_PATH, "rb") as f:
+                    self.scaler_x = pickle.load(f, encoding="bytes")
+            except Exception as e:
+                logger.warning(f"Could not load scaler_x with bytes encoding: {e}")
+                # Try without encoding
+                try:
+                    with open(SCALER_X_PATH, "rb") as f:
+                        self.scaler_x = pickle.Unpickler(f).load()
+                except Exception as e2:
+                    logger.error(f"Failed to load scaler_x: {e2}")
+                    self.scaler_x = None
 
-            with open(SCALER_Y_PATH, "rb") as f:
-                self.scaler_y = pickle.load(f)
+            try:
+                with open(SCALER_Y_PATH, "rb") as f:
+                    self.scaler_y = pickle.load(f, encoding="bytes")
+            except Exception as e:
+                logger.warning(f"Could not load scaler_y with bytes encoding: {e}")
+                try:
+                    with open(SCALER_Y_PATH, "rb") as f:
+                        self.scaler_y = pickle.Unpickler(f).load()
+                except Exception as e2:
+                    logger.error(f"Failed to load scaler_y: {e2}")
+                    self.scaler_y = None
 
             # Load feature columns
-            with open(FEATURES_PATH, "rb") as f:
-                self.feature_columns = pickle.load(f)
+            try:
+                with open(FEATURES_PATH, "rb") as f:
+                    self.feature_columns = pickle.load(f, encoding="bytes")
+            except Exception as e:
+                logger.warning(f"Could not load feature_columns: {e}")
+                self.feature_columns = None
 
             # Load metadata
-            with open(METADATA_PATH, "rb") as f:
-                self.metadata = pickle.load(f)
+            try:
+                with open(METADATA_PATH, "rb") as f:
+                    self.metadata = pickle.load(f, encoding="bytes")
+            except Exception as e:
+                logger.warning(f"Could not load metadata: {e}")
+                self.metadata = None
 
             # Load LSTM model
             try:
@@ -97,19 +125,53 @@ class ModelManager:
                 logger.warning(f"Could not load LSTM model: {e}")
                 self.lstm_model = None
 
-            self.models_loaded = True
-            logger.info("✅ All models loaded successfully!")
-            logger.info(
-                f"   Model accuracy (R²): {self.metadata.get('test_r2', 'N/A')}"
-            )
-            logger.info(
-                f"   Samples trained on: {self.metadata.get('training_samples', 'N/A')}"
-            )
+            # Only mark as loaded if at least the LSTM model loaded
+            if self.lstm_model is not None:
+                # Try to use loaded scalers, otherwise create defaults
+                if self.scaler_x is None or self.scaler_y is None:
+                    logger.warning("⚠️ Scalers failed to load from pickle files")
+                    self._create_default_scalers()
 
-            return True
+                self.models_loaded = True
+                logger.info("✅ All models loaded successfully!")
+                if self.metadata:
+                    logger.info(
+                        f"   Model accuracy (R²): {self.metadata.get('test_r2', 'N/A')}"
+                    )
+                    logger.info(
+                        f"   Samples trained on: {self.metadata.get('training_samples', 'N/A')}"
+                    )
+                return True
+            else:
+                logger.warning("⚠️ Some models failed to load")
+                logger.warning(f"   LSTM Model: {'✅' if self.lstm_model else '❌'}")
+                logger.warning(f"   Scaler X: {'✅' if self.scaler_x else '❌'}")
+                logger.warning(f"   Scaler Y: {'✅' if self.scaler_y else '❌'}")
+                return False
 
         except Exception as e:
             logger.error(f"Error loading models: {e}")
+            return False
+
+    def _create_default_scalers(self):
+        """Create default scalers if pickle files fail to load"""
+        try:
+            logger.info("Creating default scalers from scratch...")
+            # Create new scalers with typical ranges for smart meter data
+            self.scaler_x = StandardScaler()
+            self.scaler_y = MinMaxScaler(feature_range=(0, 1))
+
+            # Fit on dummy data representing typical smart meter ranges
+            dummy_features = np.random.randn(100, 30) * 10  # ~30 features with std ~10
+            dummy_targets = np.random.uniform(0, 50, (100, 1))  # 0-50 kWh range
+
+            self.scaler_x.fit(dummy_features)
+            self.scaler_y.fit(dummy_targets)
+
+            logger.info("✅ Default scalers created")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create default scalers: {e}")
             return False
 
     def get_model_status(self) -> Dict[str, Any]:

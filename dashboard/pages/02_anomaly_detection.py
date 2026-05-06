@@ -97,20 +97,17 @@ with st.sidebar:
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
-@st.cache_resource
 def load_meter_data():
     """Load meter data from real datasets folder or generate sample"""
-    if data_manager.use_real_data:
-        # Load real CEEW data
-        data = data_manager.load_real_data()
-        if data is not None:
-            return data
+    # Try to load real data first
+    real_data = data_manager.load_real_data()
+    if real_data is not None and len(real_data) > 0:
+        return real_data
 
     # Fallback to sample data
     return data_manager._generate_sample_data(days=days_lookback)
 
 
-@st.cache_resource
 def train_anomaly_detector(_data, _sensitivity):
     """Train Isolation Forest detector"""
     try:

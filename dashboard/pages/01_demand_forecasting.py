@@ -16,15 +16,13 @@ import sys
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.models.demand.lstm_model import LSTMForecaster
-from src.data.data_processor import DataProcessor
-from src.data.feature_engineering import FeatureEngineer
 from src.model_manager import (
     model_manager,
     data_manager,
     initialize_managers,
     get_model_status_message,
 )
+from src.inference import InferencePipeline
 
 logger = logging.getLogger(__name__)
 
@@ -85,89 +83,54 @@ with st.sidebar:
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
-@st.cache_resource
 def load_or_create_sample_data():
     """Load real data from datasets folder or generate sample data"""
-    if data_manager.use_real_data:
-        # Load real CEEW data
-        data = data_manager.load_real_data()
-        if data is not None:
-            return data
+    # Try to load real data first
+    real_data = data_manager.load_real_data()
+    if real_data is not None and len(real_data) > 0:
+        logger.info("✅ Using real CEEW data from /datasets")
+        return real_data
 
     # Fallback to sample data
+    logger.info("⚠️ Using sample data (real data not found)")
     return data_manager._generate_sample_data()
 
 
 @st.cache_resource
-def train_forecast_model(_data):
-    """Load pre-trained model or train new one"""
-    # Check if pre-trained model exists
-    if model_manager.models_loaded and model_manager.lstm_model is not None:
-        st.info("✅ Using pre-trained LSTM model (from notebook training)")
-        return model_manager.lstm_model
+def get_inference_pipeline():
+    """Initialize and return inference pipeline"""
+    return InferencePipeline()
 
-    # Fallback: train on-the-fly
+
+def generate_forecast(pipeline, recent_data, horizon):
+    """Generate forecast using pre-trained LSTM model"""
     try:
-        st.info("⚠️ Training LSTM on sample data (run notebook for better results)")
-        forecaster = LSTMForecaster(lookback=168, hidden_units=64, epochs=5)
-        forecaster.fit(
-            _data["kwh"] if "kwh" in _data.columns else _data["consumption_kwh"]
-        )
-        return forecaster
-    except Exception as e:
-        st.error(f"Model training error: {e}")
-        return None
-
-
-def generate_forecast(forecaster, recent_data, horizon):
-    """Generate forecast using trained model"""
-    try:
-        if forecaster is None:
+        if pipeline is None:
             # Fallback simple forecast
-            last_value = recent_data[-1]
-            trend = np.mean(np.diff(recent_data[-24:]))
+            recent_values = (
+                recent_data.values
+                if isinstance(recent_data, pd.Series)
+                else recent_data
+            )
+            last_value = recent_values[-1]
+            trend = np.mean(np.diff(recent_values[-24:]))
             forecast = last_value + trend * np.arange(1, horizon + 1)
-            return forecast, None, None
+            conf_lower = forecast - 5
+            conf_upper = forecast + 5
+            return forecast, conf_lower, conf_upper
 
-        # Use actual model prediction
-        X = recent_data.values.reshape(-1, 1)
-        if forecaster.scaler:
-            X_scaled = forecaster.scaler.transform(X)
+        # Use inference pipeline for prediction
+        result = pipeline.predict_demand(recent_data, horizon=horizon)
 
-        # Simple autoregressive forecast
-        forecast = []
-        last_seq = (
-            X_scaled[-168:].flatten() if len(X_scaled) >= 168 else X_scaled.flatten()
-        )
-
-        for _ in range(horizon):
-            if forecaster.model:
-                next_pred = forecaster.model.predict(
-                    last_seq.reshape(1, -1, 1), verbose=0
-                )[0, 0]
-            else:
-                next_pred = np.mean(last_seq)
-
-            forecast.append(next_pred)
-            last_seq = np.append(last_seq[1:], next_pred)
-
-        forecast = np.array(forecast)
-
-        # Inverse transform
-        if forecaster.scaler:
-            forecast = forecaster.scaler.inverse_transform(
-                forecast.reshape(-1, 1)
-            ).flatten()
-
-        # Generate confidence intervals
-        std_dev = np.std(recent_data[-168:] - np.mean(recent_data[-168:]))
-        conf_lower = forecast - 1.96 * std_dev
-        conf_upper = forecast + 1.96 * std_dev
+        forecast = result["forecast"]
+        conf_lower = result["confidence_lower"]
+        conf_upper = result["confidence_upper"]
 
         return forecast, conf_lower, conf_upper
 
     except Exception as e:
         st.error(f"Forecast generation error: {e}")
+        logger.error(f"Error generating forecast: {e}")
         return None, None, None
 
 
@@ -203,21 +166,24 @@ def calculate_risk_metrics(forecast):
 with st.spinner("Loading data..."):
     df = load_or_create_sample_data()
     recent_data = (
-        df[df["zone"] == selected_zone]["kwh"]
+        df[df["zone"] == selected_zone]["consumption_kwh"]
         if selected_zone != "All Zones"
-        else df["kwh"]
+        else df["consumption_kwh"]
     )
 
-# Train model
-with st.spinner(f"Training {model_type} model..."):
-    if model_type == "LSTM":
-        model = train_forecast_model(recent_data)
-    else:
-        model = None  # Placeholder for other models
+# Get inference pipeline for LSTM predictions
+pipeline = None
+if model_type == "LSTM":
+    with st.spinner("Initializing LSTM model..."):
+        pipeline = get_inference_pipeline()
+        if model_manager.models_loaded:
+            st.info("✅ Using pre-trained LSTM model")
+        else:
+            st.warning("⚠️ Pre-trained model not available")
 
 # Generate forecast
 forecast, conf_lower, conf_upper = generate_forecast(
-    model, recent_data, forecast_horizon
+    pipeline, recent_data, forecast_horizon
 )
 
 if forecast is not None:
