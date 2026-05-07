@@ -106,12 +106,11 @@ def load_meter_data():
         return real_data
 
     # Fallback to sample data
-    return data_manager._generate_sample_data(days=days_lookback)
+    return data_manager._generate_sample_data(days=90)
 
 
-@st.cache_resource
-def train_anomaly_detector(_data, _sensitivity):
-    """Train Isolation Forest detector"""
+def train_anomaly_detector(_data, _sensitivity, _zone):
+    """Train Isolation Forest detector (no caching to avoid size mismatches)"""
     try:
         # Prepare features
         features = ["consumption_kwh", "voltage", "current", "power_factor"]
@@ -130,9 +129,11 @@ def train_anomaly_detector(_data, _sensitivity):
         detector = IsolationForestDetector(contamination=_sensitivity)
         detector.fit(X_scaled)
 
+        logger.info(f"Trained detector on {len(X)} samples for zone: {_zone}")
         return detector, scaler, X_scaled
     except Exception as e:
         st.error(f"Detector training error: {e}")
+        logger.error(f"Detector training error: {e}")
         return None, None, None
 
 
@@ -207,14 +208,16 @@ with st.spinner("Loading meter data..."):
         else df_full[df_full["zone"] == selected_zone]
     )
 
-# Train detector (cached with zone + sensitivity as keys)
+# Train detector (no cache to prevent zone mismatch issues)
 with st.spinner(f"Training {detection_method} detector..."):
-    detector, scaler, X_scaled = train_anomaly_detector(df.copy(), sensitivity)
+    detector, scaler, X_scaled = train_anomaly_detector(
+        df.copy(), sensitivity, selected_zone
+    )
 
 # Detect anomalies
 predictions, scores = detect_anomalies(detector, X_scaled)
 
-if predictions is not None:
+if predictions is not None and len(predictions) == len(df):
     df["is_anomaly"] = predictions
     df["anomaly_score"] = scores
 
@@ -450,9 +453,24 @@ if predictions is not None:
         """)
 
 else:
-    st.error(
-        "Unable to run anomaly detection. Please check your data and configuration."
-    )
+    if predictions is None:
+        st.error(
+            "❌ Anomaly detection failed. Could not train detector on selected data."
+        )
+    else:
+        st.error(f"""
+        ❌ **Dimension Mismatch Error**
+        
+        DataFrame has {len(df)} rows but predictions has {len(predictions)} rows.
+        
+        This may indicate an issue with data consistency. Please try:
+        1. Selecting a different zone
+        2. Adjusting the lookback period
+        3. Refreshing the page (F5)
+        """)
+        logger.error(
+            f"Dimension mismatch: DataFrame {len(df)} vs predictions {len(predictions)}"
+        )
 
 # Footer
 st.divider()
